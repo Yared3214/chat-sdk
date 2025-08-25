@@ -6,27 +6,88 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model App {
+  id             String          @id @default(uuid())
+  name           String          @unique
+  appSecretHash  String
+  createdAt      DateTime        @default(now())
+  users          User[]
+  channels       Channel[]
+  sessions       Session[]
+  messages       Message[]
+  directMessages DirectMessage[]
+}
+
 model User {
   id        String   @id @default(uuid())
-  username  String   @unique
+  appId     String
+  username  String
   password  String
-  channels  Channel[] @relation("UserChannels")
-  messages  Message[] @relation("UserMessages")
+  app       App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  channelMemberships ChannelMember[]
+  messages  Message[]        @relation("UserMessages")
+  sentDirectMessages     DirectMessage[] @relation("DirectMessagesSent")
+  receivedDirectMessages DirectMessage[] @relation("DirectMessagesReceived")
+  sessions  Session[]
+
+  @@unique([appId, username])  // Enforce unique username per app
 }
 
 model Channel {
-  id        String    @id @default(uuid())
+  id        String          @id @default(uuid())
+  appId     String
   name      String
-  members   User[]    @relation("UserChannels")
+  isGroup   Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  app       App             @relation(fields: [appId], references: [id], onDelete: Cascade)
+  members   ChannelMember[]
   messages  Message[]
 }
 
-model Message {
-  id        String   @id @default(uuid())
-  content   String
-  userId    String
+model ChannelMember {
   channelId String
-  timestamp DateTime @default(now())
-  user      User     @relation("UserMessages", fields: [userId], references: [id])
-  channel   Channel  @relation(fields: [channelId], references: [id])
+  userId    String
+  role      String      @default("member")
+  joinedAt  DateTime    @default(now())
+  channel   Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([channelId, userId])
+}
+
+model Message {
+  id         String    @id @default(uuid())
+  appId      String
+  channelId  String
+  senderId   String
+  content    String
+  messageType String   @default("text")
+  createdAt  DateTime  @default(now())
+  app        App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  channel    Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  sender     User      @relation("UserMessages", fields: [senderId], references: [id], onDelete: Cascade)
+}
+
+model DirectMessage {
+  id         String    @id @default(uuid())
+  appId      String
+  senderId   String
+  receiverId String
+  content    String
+  messageType String   @default("text")
+  createdAt  DateTime  @default(now())
+  app        App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  sender     User      @relation("DirectMessagesSent", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User      @relation("DirectMessagesReceived", fields: [receiverId], references: [id], onDelete: Cascade)
+}
+
+model Session {
+  id        String    @id @default(uuid())
+  appId     String
+  userId    String
+  jwtToken  String
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  app       App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
