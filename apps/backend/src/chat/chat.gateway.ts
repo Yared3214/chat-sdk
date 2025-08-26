@@ -65,8 +65,10 @@ export class ChatGateway implements OnGatewayConnection {
       });
       // Ack back to sender
       client.emit('send_message_ack', { id: msg.id });
+      return { ok: true, id: msg.id };
     } catch (e: any) {
       client.emit('error', { action: 'send_message', message: e.message || 'Send failed' });
+      return { ok: false, error: e.message || 'Send failed' };
     }
   }
 
@@ -121,8 +123,10 @@ export class ChatGateway implements OnGatewayConnection {
         readAt: updated.readAt,
         by: userId,
       });
+      return { ok: true };
     } catch (e: any) {
       client.emit('error', { action: 'markDMRead', message: e.message });
+      return { ok: false, error: e.message || 'Failed to mark as read' };
     }
   }
 
