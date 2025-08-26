@@ -2,7 +2,9 @@ import { Controller, Post, Body, UnauthorizedException, HttpCode, BadRequestExce
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { SignupDto } from './dto/signup.dto';
-
+import { JwtAuthGuard } from './auth.guard';
+import { UseGuards, Get, Req } from '@nestjs/common';
+import type { Request } from 'express';  
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
@@ -20,5 +22,11 @@ export class AuthController {
  async signup(@Body() signupDto: SignupDto) {
     const user = await this.authService.signup(signupDto.username, signupDto.password);
     return this.authService.login(user); // Return token upon signup
+  }
+
+  @Get('profile')
+  @UseGuards(JwtAuthGuard)
+  getProfile(@Req() req: Request) {
+    return req.user;
   }
 }
