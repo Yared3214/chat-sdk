@@ -39,6 +39,11 @@ export class ChatGateway implements OnGatewayConnection {
       client.disconnect(true);
     }
   }
+
+  @SubscribeMessage('ping')
+  handlePing(@ConnectedSocket() client: Socket) {
+    client.emit('pong', { type: 'pong', ts: Date.now() });
+  }
   
   @SubscribeMessage('send_message')
   async onSend(
@@ -72,15 +77,18 @@ export class ChatGateway implements OnGatewayConnection {
     @ConnectedSocket() client: Socket
   ) {
     const senderId = client.data.user.id;
-
+    
     try {
       const message = await this.chat.sendDirectMessage(senderId, data.receiverId, data.content);
       const room = `dm_${[senderId, data.receiverId].sort().join('_')}`;
       this.server.to(room).emit('newDM', message);
+
+      return { ok: true, message };   // <-- this will resolve client ack
     } catch (e: any) {
-      client.emit('error', { action: 'sendDM', message: e.message || 'Failed to send DM' });
+      return { ok: false, error: e.message || 'Failed to send DM' };
     }
-}
+  }
+
   @SubscribeMessage('joinDM')
   async handleJoinDM(
     @MessageBody() data: { otherUserId: string },
