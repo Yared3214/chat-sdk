@@ -19,71 +19,82 @@ model App {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  appId     String
+  id        String   @id @default(cuid())
+  appId     String   
   username  String
   password  String
+  createdAt DateTime @default(now())
+
+  memberships ChannelMember[]
+  messages    Message[]
+  sentMessages     DirectMessage[] @relation("SentMessages")
+  receivedMessages DirectMessage[] @relation("ReceivedMessages")
   app       App      @relation(fields: [appId], references: [id], onDelete: Cascade)
-  channelMemberships ChannelMember[]
-  messages  Message[]        @relation("UserMessages")
-  sentDirectMessages     DirectMessage[] @relation("DirectMessagesSent")
-  receivedDirectMessages DirectMessage[] @relation("DirectMessagesReceived")
   sessions  Session[]
 
   @@unique([appId, username])  // Enforce unique username per app
 }
 
 model Channel {
-  id        String          @id @default(uuid())
-  appId     String
+  id        String          @id @default(cuid())
+  appId     String   
   name      String
-  isGroup   Boolean         @default(true)
+  isPrivate Boolean  @default(false)
+  isGroup   Boolean         @default(false)
   createdAt DateTime        @default(now())
+
   app       App             @relation(fields: [appId], references: [id], onDelete: Cascade)
   members   ChannelMember[]
   messages  Message[]
 }
 
 model ChannelMember {
-  channelId String
+  id        String   @id @default(cuid())
   userId    String
+  channelId String
   role      String      @default("member")
   joinedAt  DateTime    @default(now())
-  channel   Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@id([channelId, userId])
+  user    User    @relation(fields: [userId], references: [id])
+  channel Channel @relation(fields: [channelId], references: [id])
+
+  @@unique([userId, channelId])
+  @@index([channelId])
+  @@index([userId])
 }
 
 model Message {
-  id         String    @id @default(uuid())
-  appId      String
+  id         String    @id @default(cuid())
+  appId     String   
   channelId  String
   senderId   String
   content    String
-  messageType String   @default("text")
   createdAt  DateTime  @default(now())
+
   app        App       @relation(fields: [appId], references: [id], onDelete: Cascade)
-  channel    Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  sender     User      @relation("UserMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id])
+  sender  User    @relation(fields: [senderId], references: [id])
+
+  @@index([channelId, createdAt])
 }
 
 model DirectMessage {
-  id         String    @id @default(uuid())
-  appId      String
+  id         String    @id @default(cuid())
+  appId     String   
   senderId   String
   receiverId String
   content    String
-  messageType String   @default("text")
   createdAt  DateTime  @default(now())
+  readAt     DateTime?   // 👈 null = unread, timestamp = read
+
   app        App       @relation(fields: [appId], references: [id], onDelete: Cascade)
-  sender     User      @relation("DirectMessagesSent", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver   User      @relation("DirectMessagesReceived", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender    User     @relation("SentMessages", fields: [senderId], references: [id])
+  receiver  User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
 }
 
 model Session {
   id        String    @id @default(uuid())
-  appId     String
+  appId     String   
   userId    String
   jwtToken  String
   expiresAt DateTime

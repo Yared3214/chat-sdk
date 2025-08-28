@@ -7,6 +7,11 @@ import { SignupDto } from './dto/signup.dto';
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  @Post('app')
+  async createApp(@Body() body: {name: string}) {
+    return this.authService.createApp(body.name);
+  }
+
   @Post('login')
   async login(@Body() loginDto: LoginDto) {
     const user = await this.authService.validateUser(loginDto.username, loginDto.password);
@@ -18,7 +23,6 @@ export class AuthController {
 
   @Post('signup')
  async signup(@Body() signupDto: SignupDto) {
-    const user = await this.authService.signup(signupDto.username, signupDto.password);
-    return this.authService.login(user); // Return token upon signup
+    return await this.authService.signup(signupDto.username, signupDto.password);
   }
 }
