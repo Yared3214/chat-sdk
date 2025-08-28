@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "ts-node src/index.ts",
-    "test": "echo \"No tests yet\""
+    "test": "jest",
+    "test:watch": "jest --watch"
   },
   "dependencies": {
     "ws": "^8.17.0"
