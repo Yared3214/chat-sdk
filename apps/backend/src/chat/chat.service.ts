@@ -36,6 +36,9 @@ export class ChatService {
     if (channel.members.some(m => m.userId === userId)) {
       throw new BadRequestException('Already a member of the channel');
     }
+    await this.prisma.channelMember.create({
+      data: { channelId, userId, role: 'member' },
+    });
   
     return { success: true, channelId, joinedAt: new Date() };
   }
