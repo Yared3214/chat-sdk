@@ -135,6 +135,243 @@ export class SocketClient {
       throw err;
     }
   }
+
+  // ---------------------
+  // --- Channel Operations ---
+  // ---------------------
+
+  async createChannel(name: string) {
+    return new Promise(async (resolve, reject) => {
+      // Include appId in the channel data if available
+      const channelData: any = { name };
+      if (this.appId) {
+        channelData.appId = this.appId;
+      }
+
+      try {
+        const res = await fetch(this.opts.serverUrl + "/channels", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.token}`,
+          },
+          body: JSON.stringify(channelData),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          reject(err.message || "Channel creation failed");
+        } else {
+          const data = await res.json();
+          resolve(data);
+        }
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  async listChannels() {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const res = await fetch(this.opts.serverUrl + "/channels/me", {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.token}`,
+          },
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          reject(err.message || "Fetch channels failed");
+        } else {
+          const data = await res.json();
+          resolve(data);
+        }
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  async joinChannel(channelId: string) {
+    return new Promise(async(resolve, reject) => {
+      // Include appId in the join data if available
+      const joinData: any = { channelId };
+      if (this.appId) {
+        joinData.appId = this.appId;
+      }
+      try{
+        const res = await fetch(this.opts.serverUrl + `/channels/${channelId}/join`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.token}`,
+          },
+          body: JSON.stringify(joinData),
+        });
+        if (!res.ok) {
+          res.json().then(err => {
+            reject(err.message || "Join channel failed");
+          }).catch(() => {
+            reject("Join channel failed");
+          });
+        } else {
+          res.json().then(data => resolve(data)).catch(() => {
+            reject("Join channel failed");
+          });
+        }
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  async leaveChannel(channelId: string) {
+    return new Promise(async (resolve, reject) => {
+      // Include appId in the leave data if available
+      const leaveData: any = { channelId };
+      if (this.appId) {
+        leaveData.appId = this.appId;
+      }
+
+      try {
+        const res = await fetch(this.opts.serverUrl + `/channels/${channelId}/leave`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.token}`,
+          },
+          body: JSON.stringify(leaveData),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          reject(err.message || "Leave channel failed");
+        } else {
+          const data = await res.json();
+          resolve(data);
+        }
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  async getChannelHistory(channelId: string, limit: number = 50) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const res = await fetch(
+          this.opts.serverUrl +
+            `/channels/${channelId}/messages?limit=${limit}`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${this.token}`,
+            },
+          }
+        );
+        if (!res.ok) {
+          const err = await res.json();
+          reject(err.message || "Fetch channel history failed");
+        } else {
+          const data = await res.json();
+          resolve(data);
+        }
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  async inviteUser(channelId: string, userId: string) {
+    return new Promise(async (resolve, reject) => {
+      // Include appId in the invite data if available
+      const inviteData: any = { userId };
+      if (this.appId) {
+        inviteData.appId = this.appId;
+      }
+
+      try {
+        const res = await fetch(this.opts.serverUrl + `/channels/${channelId}/invite`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.token}`,
+          },
+          body: JSON.stringify(inviteData),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          reject(err.message || "Invite user failed");
+        } else {
+          const data = await res.json();
+          resolve(data);
+        }
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  async makeChannelPrivate(channelId: string) {
+    return new Promise(async (resolve, reject) => {
+      // Include appId in the request if available
+      const privateData: any = {};
+      if (this.appId) {
+        privateData.appId = this.appId;
+      }
+
+      try {
+        const res = await fetch(this.opts.serverUrl + `/channels/${channelId}/private`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.token}`,
+          },
+          body: JSON.stringify(privateData),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          reject(err.message || "Make channel private failed");
+        } else {
+          const data = await res.json();
+          resolve(data);
+        }
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  async promoteToAdmin(channelId: string, userId: string) {
+    return new Promise(async (resolve, reject) => {
+      // Include appId in the promote data if available
+      const promoteData: any = { userId };
+      if (this.appId) {
+        promoteData.appId = this.appId;
+      }
+
+      try {
+        const res = await fetch(this.opts.serverUrl + `/channels/${channelId}/promote`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.token}`,
+          },
+          body: JSON.stringify(promoteData),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          reject(err.message || "Promote to admin failed");
+        } else {
+          const data = await res.json();
+          resolve(data);
+        }
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
     
 
   // ---------------------
