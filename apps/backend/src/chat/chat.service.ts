@@ -33,12 +33,9 @@ export class ChatService {
       if (!isMember) throw new BadRequestException('You are not invited to this private channel');
     }
   
-    // add user if not already a member
-    await this.prisma.channelMember.upsert({
-      where: { userId_channelId: { userId, channelId } },
-      update: {},
-      create: { userId, channelId },
-    });
+    if (channel.members.some(m => m.userId === userId)) {
+      throw new BadRequestException('Already a member of the channel');
+    }
   
     return { success: true, channelId, joinedAt: new Date() };
   }
