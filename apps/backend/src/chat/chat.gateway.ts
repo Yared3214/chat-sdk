@@ -10,7 +10,6 @@ import { Server, Socket } from 'socket.io';
 import * as jwt from 'jsonwebtoken';
 import { ConfigService } from '@nestjs/config';
 import { ChatService } from './chat.service';
-  
 @WebSocketGateway({ cors: true, namespace: '/ws' })
 export class ChatGateway implements OnGatewayConnection {
   @WebSocketServer()
@@ -129,7 +128,5 @@ export class ChatGateway implements OnGatewayConnection {
       return { ok: false, error: e.message || 'Failed to mark as read' };
     }
   }
-
-
   }
   

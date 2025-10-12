@@ -5,6 +5,12 @@ import * as dotenv from 'dotenv';
 async function bootstrap() {
   dotenv.config();
   const app = await NestFactory.create(AppModule);
+
+  // ✅ Enable CORS for your frontend
+  app.enableCors({
+    origin: '*',
+  });
+
   await app.listen(process.env.PORT ?? 3000);     // Default to port 3000 if not specified
 }
 bootstrap();
