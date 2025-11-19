@@ -14,6 +14,7 @@ model App {
   users          User[]
   channels       Channel[]
   sessions       Session[]
+  call           Call[]
   messages       Message[]
   directMessages DirectMessage[]
 }
@@ -29,6 +30,8 @@ model User {
   messages    Message[]
   sentMessages     DirectMessage[] @relation("SentMessages")
   receivedMessages DirectMessage[] @relation("ReceivedMessages")
+  caller      Call[] @relation("Caller")
+  receiver    Call[] @relation("Receiver")
   app       App      @relation(fields: [appId], references: [id], onDelete: Cascade)
   sessions  Session[]
 
@@ -101,4 +104,19 @@ model Session {
   createdAt DateTime  @default(now())
   app       App       @relation(fields: [appId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Call {
+  id         String   @id @default(uuid())
+  appId      String
+  callerId   String
+  receiverId String
+  status     String   // "ringing" | "active" | "ended"
+  callType   String
+  startedAt  DateTime @default(now())
+  endedAt    DateTime?
+
+  app      App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  caller   User      @relation("Caller", fields: [callerId], references: [id])
+  receiver User      @relation("Receiver", fields: [receiverId], references: [id])
 }

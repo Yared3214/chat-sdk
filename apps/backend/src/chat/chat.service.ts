@@ -39,7 +39,6 @@ export class ChatService {
     await this.prisma.channelMember.create({
       data: { channelId, userId, role: 'member' },
     });
-  
     return { success: true, channelId, joinedAt: new Date() };
   }
 
@@ -178,6 +177,4 @@ export class ChatService {
       data: { readAt: new Date() },
     });
   }
-
-  
 }
