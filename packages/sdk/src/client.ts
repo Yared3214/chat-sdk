@@ -1,10 +1,11 @@
 // client.ts
 import { io, Socket } from "socket.io-client";
 import { ConnectOptions, ReconnectOptions } from "./types";
-
 export class SocketClient {
   private opts: Required<ConnectOptions>;
   private socket: Socket | null = null;
+  private pc: RTCPeerConnection | null = null;
+  private localStream: MediaStream | null = null;
   private token?: string;
   private appId?: string;
 
@@ -88,52 +89,78 @@ export class SocketClient {
     this.socket = null;
   }
 
+  private async request<T>(path: string, options: RequestInit): Promise<T> {
+    const res = await fetch(this.opts.serverUrl + path, options);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || `Request failed: ${res.status}`);
+    }
+    return res.json();
+  }
+
+  private handleAck<T>(resolve: (val: T) => void, reject: (err: any) => void) {
+    return (ack?: { ok?: boolean; error?: string; data?: T }) => {
+      if (!ack || ack.ok) resolve(ack?.data as T);
+      else reject(ack.error || "Operation failed");
+    };
+  }
+
+  private cleanupCall() {
+    this.localStream?.getTracks().forEach(t => t.stop());
+    this.pc?.close();
+    this.localStream = null;
+    this.pc = null;
+  }
+  
+  
+
+  
   async createUser(username: string, password: string) {
-    try {
       // Include appId in the request if available
       const body: any = { username, password };
       if (this.appId) {
         body.appId = this.appId;
       }
-
-      const res = await fetch(this.opts.serverUrl + "/auth/signup", {
+      return this.request('/auth/signup', {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json"},
         body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "User creation failed");
-      }
-      return await res.json();
-    } catch (err) {
-      throw err;
-    }
+      })
   }
 
   async login(username: string, password: string) {
-    try {
       // Include appId in the request if available
       const body: any = { username, password };
       if (this.appId) {
         body.appId = this.appId;
       }
-
-      const res = await fetch(this.opts.serverUrl + "/auth/login", {
+      return await this.request('/auth/login', {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Login failed");
-      }
-      const data = await res.json();
-      const token = data.access_token;
-      return token;
-    } catch (err) {
-      throw err;
+  }
+
+  async getUsernameById(userId: string) {
+    return this.request(`/user/${userId}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json",
+          Authorization: `Bearer ${this.token}`,  
+        },
+      })
+  }
+
+  async listAllUsers() {
+    const body: any = {}
+    if (this.appId) {
+      body.appId = this.appId
     }
+    return this.request(`/user/${body.appId}/many`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json",
+          Authorization: `Bearer ${this.token}`,  
+        },
+    })
   }
 
   // ---------------------
@@ -141,236 +168,123 @@ export class SocketClient {
   // ---------------------
 
   async createChannel(name: string) {
-    return new Promise(async (resolve, reject) => {
       // Include appId in the channel data if available
       const channelData: any = { name };
       if (this.appId) {
         channelData.appId = this.appId;
       }
-
-      try {
-        const res = await fetch(this.opts.serverUrl + "/channels", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.token}`,
-          },
-          body: JSON.stringify(channelData),
-        });
-        if (!res.ok) {
-          const err = await res.json();
-          reject(err.message || "Channel creation failed");
-        } else {
-          const data = await res.json();
-          resolve(data);
-        }
-      } catch (err) {
-        reject(err);
-      }
-    });
+      return this.request('/channels', {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify(channelData),
+      })
   }
 
   async listChannels() {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const res = await fetch(this.opts.serverUrl + "/channels/me", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.token}`,
-          },
-        });
-        if (!res.ok) {
-          const err = await res.json();
-          reject(err.message || "Fetch channels failed");
-        } else {
-          const data = await res.json();
-          resolve(data);
-        }
-      } catch (err) {
-        reject(err);
-      }
-    });
+    return this.request('/channels/me', {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.token}`,
+      },
+    })
   }
 
   async joinChannel(channelId: string) {
-    return new Promise(async(resolve, reject) => {
       // Include appId in the join data if available
       const joinData: any = { channelId };
       if (this.appId) {
         joinData.appId = this.appId;
       }
-      try{
-        const res = await fetch(this.opts.serverUrl + `/channels/${channelId}/join`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.token}`,
-          },
-          body: JSON.stringify(joinData),
-        });
-        if (!res.ok) {
-          res.json().then(err => {
-            reject(err.message || "Join channel failed");
-          }).catch(() => {
-            reject("Join channel failed");
-          });
-        } else {
-          res.json().then(data => resolve(data)).catch(() => {
-            reject("Join channel failed");
-          });
-        }
-      } catch (err) {
-        reject(err);
-      }
-    });
+      return this.request(`/channels/${channelId}/join`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify(joinData),
+      });
   }
 
   async leaveChannel(channelId: string) {
-    return new Promise(async (resolve, reject) => {
       // Include appId in the leave data if available
       const leaveData: any = { channelId };
       if (this.appId) {
         leaveData.appId = this.appId;
       }
 
-      try {
-        const res = await fetch(this.opts.serverUrl + `/channels/${channelId}/leave`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.token}`,
-          },
-          body: JSON.stringify(leaveData),
-        });
-        if (!res.ok) {
-          const err = await res.json();
-          reject(err.message || "Leave channel failed");
-        } else {
-          const data = await res.json();
-          resolve(data);
-        }
-      } catch (err) {
-        reject(err);
-      }
-    });
+      return this.request( `/channels/${channelId}/leave`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify(leaveData),
+      });
   }
 
   async getChannelHistory(channelId: string, limit: number = 50) {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const res = await fetch(
-          this.opts.serverUrl +
-            `/channels/${channelId}/messages?limit=${limit}`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${this.token}`,
-            },
-          }
-        );
-        if (!res.ok) {
-          const err = await res.json();
-          reject(err.message || "Fetch channel history failed");
-        } else {
-          const data = await res.json();
-          resolve(data);
-        }
-      } catch (err) {
-        reject(err);
-      }
+    return this.request(`/channels/${channelId}/messages?limit=${limit}`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.token}`,
+      },
     });
   }
 
   async inviteUser(channelId: string, userId: string) {
-    return new Promise(async (resolve, reject) => {
       // Include appId in the invite data if available
       const inviteData: any = { userId };
       if (this.appId) {
         inviteData.appId = this.appId;
       }
 
-      try {
-        const res = await fetch(this.opts.serverUrl + `/channels/${channelId}/invite`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.token}`,
-          },
-          body: JSON.stringify(inviteData),
-        });
-        if (!res.ok) {
-          const err = await res.json();
-          reject(err.message || "Invite user failed");
-        } else {
-          const data = await res.json();
-          resolve(data);
-        }
-      } catch (err) {
-        reject(err);
-      }
-    });
+      return this.request(`/channels/${channelId}/invite`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify(inviteData),
+      });
   }
 
   async makeChannelPrivate(channelId: string) {
-    return new Promise(async (resolve, reject) => {
       // Include appId in the request if available
       const privateData: any = {};
       if (this.appId) {
         privateData.appId = this.appId;
       }
 
-      try {
-        const res = await fetch(this.opts.serverUrl + `/channels/${channelId}/private`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.token}`,
-          },
-          body: JSON.stringify(privateData),
-        });
-        if (!res.ok) {
-          const err = await res.json();
-          reject(err.message || "Make channel private failed");
-        } else {
-          const data = await res.json();
-          resolve(data);
-        }
-      } catch (err) {
-        reject(err);
-      }
-    });
+      return this.request(`/channels/${channelId}/private`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify(privateData),
+      });
   }
 
   async promoteToAdmin(channelId: string, userId: string) {
-    return new Promise(async (resolve, reject) => {
       // Include appId in the promote data if available
       const promoteData: any = { userId };
       if (this.appId) {
         promoteData.appId = this.appId;
       }
 
-      try {
-        const res = await fetch(this.opts.serverUrl + `/channels/${channelId}/promote`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.token}`,
-          },
-          body: JSON.stringify(promoteData),
-        });
-        if (!res.ok) {
-          const err = await res.json();
-          reject(err.message || "Promote to admin failed");
-        } else {
-          const data = await res.json();
-          resolve(data);
-        }
-      } catch (err) {
-        reject(err);
-      }
-    });
+      return this.request(`/channels/${channelId}/promote`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify(promoteData),
+      });
   }
     
 
@@ -389,10 +303,7 @@ export class SocketClient {
       this.socket?.emit(
         "sendDM",
         dmData,
-        (ack: { ok: boolean; message?: any; error?: string }) => {
-          if (ack?.ok) resolve(ack.message);
-          else reject(ack?.error || "Send failed");
-        }
+        this.handleAck(resolve, reject)
       );
     });
   }
@@ -407,10 +318,7 @@ export class SocketClient {
       this.socket?.emit(
         "send_message",
         msgData,
-        (ack: { ok?: boolean; id?: string; error?: string }) => {
-          if (ack?.ok || ack === undefined) resolve(ack);
-          else reject(ack?.error || "Send failed");
-        }
+        this.handleAck(resolve, reject)
       );
     });
   }
@@ -442,11 +350,130 @@ export class SocketClient {
       readData.appId = this.appId;
     }
     
-    this.socket?.emit("markDMRead", readData, (ack: { ok?: boolean; error?: string }) => {
-      if (ack?.ok || ack === undefined) resolve(ack);
-      else reject(ack?.error || "Mark as read failed");
-    });
+    this.socket?.emit("markDMRead", readData, this.handleAck(resolve, reject));
   })
+  }
+
+  // ------------------------
+  // --- Call Operations ----
+  // ------------------------
+
+  async createCall(receiverId: string) {
+    return this.request('/call', {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.token}` },
+      body: JSON.stringify({ receiverId}),
+    });
+  }
+
+  async startCall(receiverId: string, callId: string) {
+    return new Promise(async (resolve, reject) => {
+      // const callData = await this.createCall(receiverId);
+      // if (!callData) throw new Error("Call initiation failed");
+      // const callId = (callData as any).id;
+      this.pc = new RTCPeerConnection();
+
+        // capture mic
+      this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.localStream.getTracks().forEach(track => this.pc!.addTrack(track, this.localStream!));
+
+      // send ICE candidates
+    this.pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        this.socket?.emit("sendIceCandidate", { callId, receiverId, candidate: e.candidate }, this.handleAck(resolve, reject));
+      }
+    };
+
+    // remote audio
+    this.pc.ontrack = (e) => {
+      const audio = new Audio();
+      audio.srcObject = e.streams[0];
+      audio.play();
+    };
+
+    // create offer
+    const offer = await this.pc.createOffer();
+    await this.pc.setLocalDescription(offer);
+
+    this.socket?.emit("sendOffer", { callId, receiverId, offer },this.handleAck(resolve, reject));
+    });
+  }
+  
+
+  async handleIncomingCall(callId: string, fromUserId: string) {
+    this.cleanupCall();
+    this.pc = new RTCPeerConnection();
+
+    this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    this.localStream.getTracks().forEach(track => this.pc!.addTrack(track, this.localStream!));
+
+    this.pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        this.socket?.emit("sendIceCandidate", { callId, toUserId: fromUserId, candidate: e.candidate });
+      }
+    };
+
+    this.pc.ontrack = (e) => {
+      const audio = new Audio();
+      audio.srcObject = e.streams[0];
+      audio.play();
+    };
+  }
+
+  // Called when receiving an offer
+  async receiveOffer(callId: string, fromUserId: string, offer: RTCSessionDescriptionInit) {
+    await this.pc!.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await this.pc!.createAnswer();
+    await this.pc!.setLocalDescription(answer);
+    this.socket?.emit("sendAnswer", { callId, toUserId: fromUserId, answer });
+  }
+
+  async receiveAnswer(answer: RTCSessionDescriptionInit) {
+    await this.pc!.setRemoteDescription(new RTCSessionDescription(answer));
+  }
+
+  async addIceCandidate(candidate: RTCIceCandidateInit) {
+    await this.pc!.addIceCandidate(new RTCIceCandidate(candidate));
+  }
+
+  async endCall(callId: string, toUserId: string) {
+    return new Promise((resolve, reject) => {
+      this.pc?.close();
+      this.pc = null;
+      const endData: any = { callId };
+      if (this.appId) endData.appId = this.appId;
+      this.socket?.emit(
+        "endCall",
+        endData,
+        this.handleAck(resolve, reject)
+      );
+    });
+  }
+
+  // ------------------------
+  // --- Call Listeners -----
+  // ------------------------
+
+  onIncomingCall(handler: (call: any) => void) {
+    this.socket?.on("incomingCall", handler);
+  }
+
+  onCallAnswered(handler: (call: any) => void) {
+    this.socket?.on("callAnswered", handler);
+  }
+
+  onCallEnded(handler: (callId: string) => void) {
+    this.socket?.on("callEnded", handler);
+  }
+
+  onReceiveOffer(cb: (callId: string, from: string, offer: RTCSessionDescriptionInit) => void) {
+    this.socket?.on("receiveOffer", cb);
+  }
+  onReceiveAnswer(cb: (answer: RTCSessionDescriptionInit) => void) {
+    this.socket?.on("receiveAnswer", cb);
+  }
+  onReceiveIceCandidate(cb: (candidate: RTCIceCandidateInit) => void) {
+    this.socket?.on("receiveIceCandidate", cb);
   }
   
 
@@ -456,6 +483,7 @@ export class SocketClient {
 
   onNewDM(handler: (msg: any) => void) {
     this.socket?.on("newDM", handler);
+    return () => this.socket?.off("newDM", handler);
   }
 
   onSendMessageAck(handler: (ack: any) => void) {

@@ -1,15 +1,26 @@
 {
-  "name": "@chat/sdk",
+  "name": "@chat-sdk/sdk-web",
   "version": "0.1.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsup src/index.ts --format cjs,esm --dts",
     "dev": "ts-node src/index.ts",
     "test": "jest",
     "test:watch": "jest --watch"
   },
   "dependencies": {
+    "socket.io-client": "^4.8.1",
     "ws": "^8.17.0"
   },
   "devDependencies": {
