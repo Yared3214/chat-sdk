@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Call Test</title>
+  <script type="module">
+    import { SocketClient } from "./packages/sdk/src/client.js"; // adjust path if needed
+
+    let client;
+
+    async function loginUser(username, password) {
+      client = new SocketClient({ serverUrl: "http://10.242.185.207:3000" }); // change if server is elsewhere
+      const token = await client.login(username, password);
+      console.log(token)
+      await client.connect(token);
+
+      document.getElementById("status").innerText = `✅ Logged in as ${username}`;
+      setupCallListeners(client);
+    }
+
+    function setupCallListeners(c) {
+      // Incoming call
+      c.onIncomingCall((call) => {
+        console.log("📞 Incoming call", call);
+        document.getElementById("status").innerText = "📞 Incoming call...";
+        c.handleIncomingCall(call.id, call.fromUserId);
+      });
+
+      // Offer/Answer/Candidates exchange
+      c.onReceiveOffer((callId, from, offer) => {
+        console.log("📨 Offer received");
+        c.receiveOffer(callId, from, offer);
+      });
+
+      c.onReceiveAnswer((answer) => {
+        console.log("📨 Answer received");
+        c.receiveAnswer(answer);
+      });
+
+      c.onReceiveIceCandidate((candidate) => {
+        console.log("📨 ICE candidate received");
+        c.addIceCandidate(candidate);
+      });
+
+      // Call ended
+      c.onCallEnded(() => {
+        console.log("❌ Call ended");
+        document.getElementById("status").innerText = "❌ Call ended";
+      });
+    }
+
+    async function startCall() {
+      const receiverId = document.getElementById("receiver").value;
+      if (!receiverId) {
+        alert("Enter receiver user ID");
+        return;
+      }
+
+      try {
+        const call = await client.createCall(receiverId);
+        await client.startCall(receiverId, call.id);
+        document.getElementById("status").innerText = "📞 Call started...";
+      } catch (err) {
+        console.error(err);
+        document.getElementById("status").innerText = "⚠️ Call failed";
+      }
+    }
+
+    async function endCall() {
+      const receiverId = document.getElementById("receiver").value;
+      if (!receiverId) {
+        alert("Enter receiver user ID");
+        return;
+      }
+      try {
+        await client.endCall("some-call-id", receiverId); // you may store the callId when you create/start
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    window.loginUser = loginUser;
+    window.startCall = startCall;
+    window.endCall = endCall;
+  </script>
+</head>
+<body>
+  <h1>📞 Call Test</h1>
+
+  <div>
+    <h3>Login</h3>
+    <input id="username" placeholder="Username" />
+    <input id="password" type="password" placeholder="Password" />
+    <button onclick="loginUser(username.value, password.value)">Login</button>
+  </div>
+
+  <div>
+    <h3>Call Controls</h3>
+    <input id="receiver" placeholder="Receiver User ID" />
+    <button onclick="startCall()">Start Call</button>
+    <button onclick="endCall()">End Call</button>
+  </div>
+
+  <p id="status">Not connected</p>
+</body>
+</html>
